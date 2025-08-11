@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "itanium_demangler"
+version = "1.1"
+authors = [
+    { name = "whitequark", email = "whitequark@whitequark.org" },
+]
+description = "Pure Python parser for mangled itanium symbols"
+readme = "README.md"
+requires-python = ">=3.7"
+license = { text = "BSD" }
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: OS Independent",
+    "License :: OSI Approved :: BSD License",
+]
+
+[project.urls]
+"Homepage" = "https://github.com/whitequark/python-itanium_demangler"
