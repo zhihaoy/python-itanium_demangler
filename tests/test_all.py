@@ -61,11 +61,11 @@ _operator_tests = [
 
 @pytest.mark.parametrize("op_code, op_str", _operator_tests)
 def test_operators(op_code, op_str):
-    assert_demangles('_Z' + op_code, op_str)
+    assert_roundtrip('_Z' + op_code, op_str)
 
 
 def test_operator_cast():
-    assert_demangles('_Zcvi', 'operator int')
+    assert_roundtrip('_Zcvi', 'operator int')
 
 
 @pytest.mark.parametrize("mangled, demangled", [

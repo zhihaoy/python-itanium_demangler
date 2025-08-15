@@ -15,6 +15,8 @@ Name nodes:
       the type of destructor
     * `oper`: `node.value` (`str`) holds a symbolic operator name, without the keyword
       "operator"
+    * `oper_unary`: same as `oper` but to distinguish unary operators from their binary
+      counterparts
     * `oper_cast`: `node.value` holds a type node
     * `tpl_args`: `node.value` (`tuple`) holds a sequence of type nodes
     * `qual_name`: `node.value` (`tuple`) holds a sequence of `name` and `tpl_args` nodes,
@@ -130,8 +132,8 @@ class Node(namedtuple('Node', 'kind value')):
                 return '{base dtor}'
             else:
                 assert False
-        elif self.kind == 'oper':
-            if self.value.startswith('new') or self.value.startswith('delete'):
+        elif self.kind in ('oper', 'oper_unary'):
+            if self.value[0].isalpha():
                 return 'operator ' + self.value
             else:
                 return 'operator' + self.value
@@ -189,6 +191,12 @@ class Node(namedtuple('Node', 'kind value')):
             return _mangled_ctor_map[self.value]
         elif self.kind == 'dtor':
             return _mangled_dtor_map[self.value]
+        elif self.kind == 'oper':
+            return _mangled_operators[self.value]
+        elif self.kind == 'oper_unary':
+            return _mangled_unary_operators[self.value]
+        elif self.kind == 'oper_cast':
+            return f'cv{self.value.encoding()}'
 
         return ""
 
@@ -466,15 +474,19 @@ _std_names = {
     'Sd': [Node('name', 'std'), Node('name', 'iostream')],
 }
 
+# `!` is also unary, but without ambiguity
+_unary_operators = {
+    'ps': '+',
+    'ng': '-',
+    'ad': '&',
+    'de': '*',
+}
+
 _operators = {
     'nw': 'new',
     'na': 'new[]',
     'dl': 'delete',
     'da': 'delete[]',
-    'ps': '+', # (unary)
-    'ng': '-', # (unary)
-    'ad': '&', # (unary)
-    'de': '*', # (unary)
     'co': '~',
     'pl': '+',
     'mi': '-',
@@ -551,6 +563,8 @@ _builtin_types = {
 _mangled_ctor_map = {v: k for k, v in _ctor_dtor_map.items() if k.startswith('C')}
 _mangled_dtor_map = {v: k for k, v in _ctor_dtor_map.items() if k.startswith('D')}
 _mangled_builtin_types = {v: k for k, v in _builtin_types.items()}
+_mangled_unary_operators = {v: k for k, v in _unary_operators.items()}
+_mangled_operators = {v: k for k, v in _operators.items()}
 
 
 def _handle_cv(qualifiers, node):
@@ -663,7 +677,11 @@ def _parse_name(cursor, is_nested=False):
     elif match.group('std_name') is not None:
         node = Node('qual_name', _std_names[match.group('std_name')])
     elif match.group('operator_name') is not None:
-        node = Node('oper', _operators[match.group('operator_name')])
+        encoded = match.group('operator_name')
+        if encoded in _unary_operators:
+            node = Node('oper_unary', _unary_operators[encoded])
+        else:
+            node = Node('oper', _operators[encoded])
     elif match.group('operator_cv') is not None:
         ty = _parse_type(cursor)
         if ty is None:
@@ -727,11 +745,11 @@ def _parse_name(cursor, is_nested=False):
         node = QualNode('abi', node, frozenset(abi_tags))
 
     if not is_nested and cursor.accept('I') and (
-            node.kind in ('name', 'oper', 'oper_cast') or
+            node.kind in ('name', 'oper', 'oper_unary', 'oper_cast') or
             match.group('std_prefix') is not None or
             match.group('std_name') is not None or
             match.group('substitution') is not None):
-        if node.kind in ('name', 'oper', 'oper_cast') or match.group('std_prefix') is not None:
+        if node.kind in ('name', 'oper', 'oper_unary', 'oper_cast') or match.group('std_prefix') is not None:
             cursor.add_subst(node) # <unscoped-template-name> ::= <substitution>
         templ_args = _parse_until_end(cursor, 'tpl_args', _parse_type)
         if templ_args is None:
@@ -739,7 +757,7 @@ def _parse_name(cursor, is_nested=False):
         node = Node('qual_name', (node, templ_args))
         if ((match.group('std_prefix') is not None or
                 match.group('std_name') is not None) and
-                node.value[0].value[1].kind not in ('oper', 'oper_cast')):
+                node.value[0].value[1].kind not in ('oper', 'oper_unary', 'oper_cast')):
             cursor.add_subst(node)
 
     return node
