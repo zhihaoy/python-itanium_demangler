@@ -417,6 +417,13 @@ class ArrayNode(namedtuple('ArrayNode', 'kind dimension ty')):
         else:
             return ""
 
+    def encoding(self):
+        if self.kind == 'array':
+            # instantiation-dependent array bound expression is not supported
+            return f'A{self.dimension.value}_{self.ty.encoding()}'
+        else:
+            return ""
+
     def map(self, f):
         if self.kind == 'array':
             return self._replace(dimension=f(self.dimension) if self.dimension else None,

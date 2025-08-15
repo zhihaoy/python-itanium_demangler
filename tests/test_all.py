@@ -44,7 +44,7 @@ def test_name(mangled, demangled):
     ('_ZN3fooD1IcEEc', 'foo::{dtor}<char>(char)'),
 ])
 def test_ctor_dtor(mangled, demangled):
-    assert_demangles(mangled, demangled)
+    assert_roundtrip(mangled, demangled)
 
 
 # Create a list of operators for parametrization, excluding special cases
@@ -252,7 +252,10 @@ def test_operator_template(mangled, demangled):
     ('_Z1fIA1_cS0_E', 'f<char[(int)1], char[(int)1]>'),
 ])
 def test_array(mangled, demangled):
-    assert_demangles(mangled, demangled)
+    if 'S' in mangled:
+        assert_demangles(mangled, demangled)
+    else:
+        assert_roundtrip(mangled, demangled)
 
 
 def test_array_none():
