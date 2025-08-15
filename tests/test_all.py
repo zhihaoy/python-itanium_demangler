@@ -70,13 +70,14 @@ def test_operator_cast():
 
 @pytest.mark.parametrize("mangled, demangled", [
     ('_ZSt3foo', 'std::foo'),
-    ('_ZStN3fooE', 'std::foo'),
+    ('_ZNSt3sub3fooE', 'std::sub::foo'),
     ('_ZSs', 'std::string'),
     ('_Z3fooISt6vectorE', 'foo<std::vector>'),
+    ('_Z3fooINSt3__19allocatorIcEEE', 'foo<std::__1::allocator<char>>'),
     ('_ZSaIhE', 'std::allocator<unsigned char>'),
 ])
 def test_std_substs(mangled, demangled):
-    assert_demangles(mangled, demangled)
+    assert_roundtrip(mangled, demangled)
 
 
 def test_std_substs_none():

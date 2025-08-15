@@ -178,7 +178,13 @@ class Node(namedtuple('Node', 'kind value')):
             if self == _builtin_types['Dn']:
                 return 'Dn'
             elif _is_nested_name(self):
-                return f'N{"".join(p.encoding() for p in self.value)}E'
+                prefix, rest = _infer_std_names(self.value)
+                if prefix is None:
+                    return f'N{"".join(p.encoding() for p in rest)}E'
+                elif len(rest) > 1:
+                    return f'N{prefix}{"".join(p.encoding() for p in rest)}E'
+                else:
+                    return f'{prefix}{"".join(p.encoding() for p in rest)}'
             else:
                 return "".join(p.encoding() for p in self.value)
         elif self.kind == 'tpl_args':
@@ -1058,6 +1064,19 @@ def _is_nested_name(ast) -> bool:
     else:
         return ast.kind == 'abominable'
 
+
+def _infer_std_names(components):
+    best_match_prefix = None
+    best_match_len = 0
+
+    for prefix, std_name in _std_names.items():
+        std_len = len(std_name)
+        if len(components) >= std_len and list(components[:std_len]) == std_name:
+            if std_len > best_match_len:
+                best_match_len = std_len
+                best_match_prefix = prefix
+
+    return best_match_prefix, list(components[best_match_len:])
 
 # ================================================================================================
 
