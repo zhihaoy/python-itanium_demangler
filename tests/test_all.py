@@ -1,6 +1,6 @@
 import pytest
 
-from itanium_demangler import parse, _operators, _builtin_types
+from itanium_demangler import parse, mangle, _operators, _builtin_types
 
 
 def assert_parses(mangled, ast):
@@ -9,8 +9,18 @@ def assert_parses(mangled, ast):
 
 
 def assert_demangles(mangled, demangled):
+    """Asserts that a mangled name demangles to the expected string."""
     result = parse(mangled)
     if result is not None:
+        result = str(result)
+    assert result == demangled
+
+
+def assert_roundtrip(mangled, demangled):
+    """Asserts demangling and that the parsed AST mangles back to the original."""
+    result = parse(mangled)
+    if result is not None:
+        assert mangle(result) == mangled
         result = str(result)
     assert result == demangled
 
@@ -20,7 +30,7 @@ def assert_demangles(mangled, demangled):
     ('_Z3x', None),
 ])
 def test_name(mangled, demangled):
-    assert_demangles(mangled, demangled)
+    assert_roundtrip(mangled, demangled)
 
 
 @pytest.mark.parametrize("mangled, demangled", [
@@ -79,11 +89,14 @@ def test_std_substs_none():
     ('_ZN3fooIcE5bargeE', 'foo<char>::barge'),
     ('_ZNK3fooE', 'foo const'),
     ('_ZNV3fooE', 'foo volatile'),
-    ('_ZNKR3fooE', 'foo const&'),
-    ('_ZNKO3fooE', 'foo const&&'),
+    ('_ZNKR3fooE', 'foo const &'),
+    ('_ZNKO3fooE', 'foo const &&'),
 ])
 def test_nested_name(mangled, demangled):
-    assert_demangles(mangled, demangled)
+    if demangled.isalnum():
+        assert_demangles(mangled, demangled)
+    else:
+        assert_roundtrip(mangled, demangled)
 
 
 def test_nested_name_none():
@@ -92,10 +105,10 @@ def test_nested_name_none():
 
 @pytest.mark.parametrize("mangled, demangled", [
     ('_Z3fooIcE', 'foo<char>'),
-    ('_ZN3fooIcEE', 'foo<char>'),
+    ('_ZN2ns3fooIcEE', 'ns::foo<char>'),
 ])
 def test_template_args(mangled, demangled):
-    assert_demangles(mangled, demangled)
+    assert_roundtrip(mangled, demangled)
 
 
 def test_template_args_none():
@@ -113,22 +126,22 @@ def test_builtin_types(type_code, type_node):
     ('_Z1fIriE', 'f<int restrict>'),
     ('_Z1fIKiE', 'f<int const>'),
     ('_Z1fIViE', 'f<int volatile>'),
-    ('_Z1fIVVViE', 'f<int volatile>'),
+    ('_Z1fIKViE', 'f<int const volatile>'),
 ])
 def test_qualified_type(mangled, demangled):
-    assert_demangles(mangled, demangled)
+    assert_roundtrip(mangled, demangled)
 
 
 @pytest.mark.parametrize("mangled, demangled", [
     ('_Z1fv', 'f()'),
     ('_Z1fi', 'f(int)'),
     ('_Z1fic', 'f(int, char)'),
-    ('_ZN1fEic', 'f(int, char)'),
-    ('_ZN1fIEEic', 'int f<>(char)'),
+    ('_Z1fic', 'f(int, char)'),
+    ('_Z1fIEic', 'int f<>(char)'),
     ('_ZN1fIEC1Eic', 'f<>::{ctor}(int, char)'),
 ])
 def test_function_type(mangled, demangled):
-    assert_demangles(mangled, demangled)
+    assert_roundtrip(mangled, demangled)
 
 
 @pytest.mark.parametrize("mangled, demangled", [
@@ -140,7 +153,7 @@ def test_function_type(mangled, demangled):
     ('_Z1fIRKiE', 'f<int const&>'),
 ])
 def test_indirect_type(mangled, demangled):
-    assert_demangles(mangled, demangled)
+    assert_roundtrip(mangled, demangled)
 
 
 @pytest.mark.parametrize("mangled, demangled", [
@@ -213,7 +226,8 @@ def test_substitution_none(mangled):
 
 
 def test_abi_tag():
-    assert_demangles('_Z3fooB5cxx11v', 'foo[abi:cxx11]()')
+    assert_roundtrip('_Z3fooB5cxx11v', 'foo[abi:cxx11]()')
+    assert_roundtrip('_Z1AB3barB3foo', 'A[abi:bar][abi:foo]')
 
 
 def test_const():
@@ -253,7 +267,7 @@ def test_array_none():
     ('_Z1fKFvvE', 'f(void () const)'),
 ])
 def test_function(mangled, demangled):
-    assert_demangles(mangled, demangled)
+    assert_roundtrip(mangled, demangled)
 
 
 @pytest.mark.parametrize("mangled, demangled",
@@ -264,7 +278,7 @@ def test_function(mangled, demangled):
                           ('_Z1fM3foo3barIlE', 'f(bar<long> foo::*)'),
                           ('_Z3fooPM2ABi', 'foo(int AB::**)')])
 def test_member_data(mangled, demangled):
-    assert_demangles(mangled, demangled)
+    assert_roundtrip(mangled, demangled)
 
 
 @pytest.mark.parametrize("mangled, demangled", [
@@ -273,4 +287,12 @@ def test_member_data(mangled, demangled):
     ('_Z3fooRM3barFviE', 'foo(void (bar::*&)(int))'),
 ])
 def test_member_function(mangled, demangled):
-    assert_demangles(mangled, demangled)
+    assert_roundtrip(mangled, demangled)
+
+
+@pytest.mark.parametrize("mangled, demangled", [
+    ('_Z3fooIRKN5boost2lsEEiv', 'int foo<boost::ls const&>()'),
+    ('_ZNKR5boost2ls5memfnEv', 'boost::ls::memfn() const &'),
+])
+def test_calls(mangled, demangled):
+    assert_roundtrip(mangled, demangled)

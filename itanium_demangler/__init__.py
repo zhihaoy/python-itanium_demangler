@@ -20,6 +20,8 @@ Name nodes:
     * `qual_name`: `node.value` (`tuple`) holds a sequence of `name` and `tpl_args` nodes,
       possibly ending in a `ctor`, `dtor` or `operator` node
     * `abi`: `node.value` holds a name node, `node.qual` (`frozenset`) holds a set of ABI tags
+    * `abominable`: `node.value` holds a name node, `node.qual` (`frozenset`) holds any
+      combinations from `"const"`, `"volatile"`, `"&"`, and `"&&"`
 
 Type nodes:
     * `name` and `qual_name` specify a type by its name
@@ -164,6 +166,32 @@ class Node(namedtuple('Node', 'kind value')):
         else:
             return repr(self)
 
+    def encoding(self):
+        if self.kind == 'name':
+            return f'{len(self.value)}{self.value}'
+        elif self.kind == 'builtin':
+            return _mangled_builtin_types.get(self, "")
+        elif self.kind == 'qual_name':
+            # Note: This doesn't handle substitutions, which is a complex topic.
+            if _is_nested_name(self):
+                return f'N{"".join(p.encoding() for p in self.value)}E'
+            else:
+                return "".join(p.encoding() for p in self.value)
+        elif self.kind == 'tpl_args':
+            return f'I{"".join(p.encoding() for p in self.value)}E'
+        elif self.kind == 'pointer':
+            return f'P{self.value.encoding()}'
+        elif self.kind == 'lvalue':
+            return f'R{self.value.encoding()}'
+        elif self.kind == 'rvalue':
+            return f'O{self.value.encoding()}'
+        elif self.kind == 'ctor':
+            return _mangled_ctor_map[self.value]
+        elif self.kind == 'dtor':
+            return _mangled_dtor_map[self.value]
+
+        return ""
+
     def left(self):
         if self.kind == "pointer":
             return self.value.left() + "*"
@@ -196,11 +224,39 @@ class QualNode(namedtuple('QualNode', 'kind value qual')):
 
     def __str__(self):
         if self.kind == 'abi':
-            return str(self.value) + "".join(['[abi:' + tag + ']' for tag in self.qual])
+            return str(self.value) + "".join(['[abi:' + tag + ']' for tag in sorted(self.qual)])
         elif self.kind == 'cv_qual':
-            return ' '.join([str(self.value)] + list(self.qual))
+            return ' '.join([str(self.value)] + sorted(self.qual))
+        elif self.kind == 'abominable':
+            return ' '.join([str(self.value)] + _order_abominable_qualifiers(self))
         else:
             return repr(self)
+
+    def encoding(self, parent=None):
+        if self.kind == 'abi':
+            return self.value.encoding() + ''.join(f'B{len(x)}{x}' for x in sorted(self.qual))
+        elif self.kind == 'cv_qual':
+            text = ""
+            if 'const' in self.qual:
+                text += 'K'
+            if 'volatile' in self.qual:
+                text += 'V'
+            if 'restrict' in self.qual:
+                text += 'r'
+            return f'{text}{self.value.encoding()}'
+        elif self.kind == 'abominable':
+            text = ""
+            if 'const' in self.qual:
+                text += 'K'
+            if 'volatile' in self.qual:
+                text += 'V'
+            if '&' in self.qual:
+                text += 'R'
+            elif '&&' in self.qual:
+                text += 'O'
+            return f'N{text}{"".join(p.encoding() for p in self.value.value)}E'
+        else:
+            return ""
 
     def left(self):
         return str(self)
@@ -225,6 +281,11 @@ class CastNode(namedtuple('CastNode', 'kind value ty')):
         else:
             return repr(self)
 
+    def encoding(self):
+        if self.kind == 'literal':
+            return 'L' + self.ty.encoding() + str(self.value) + 'E'
+        return ""
+
     def left(self):
         return str(self)
 
@@ -248,12 +309,19 @@ class FuncNode(namedtuple('FuncNode', 'kind name arg_tys ret_ty')):
             result = ""
             if self.ret_ty is not None:
                 result += str(self.ret_ty) + ' '
+            qual = None
             if self.name is not None:
-                result += str(self.name)
+                if self.name.kind == 'abominable':
+                    qual = _order_abominable_qualifiers(self.name)
+                    result += str(self.name.value)
+                else:
+                    result += str(self.name)
             if self.arg_tys == (Node('builtin', 'void'),):
                 result += '()'
             else:
                 result += '(' + ', '.join(map(str, self.arg_tys)) + ')'
+            if qual:
+                result += ' ' + ' '.join(qual)
             return result
         else:
             return repr(self)
@@ -280,6 +348,23 @@ class FuncNode(namedtuple('FuncNode', 'kind name arg_tys ret_ty')):
             return result
         else:
             return ""
+
+    def encoding(self):
+        if self.kind == 'func':
+            if self.name is None:
+                result = 'F'
+            else:
+                result = self.name.encoding()
+            if self.ret_ty is not None:
+                result += self.ret_ty.encoding()
+            result += ''.join(p.encoding() for p in self.arg_tys)
+            # it's a bare-function-type
+            if self.name is None:
+                result += 'E'
+            return result
+        else:
+            return ""
+
 
     def map(self, f):
         if self.kind == 'func':
@@ -350,6 +435,9 @@ class MemberNode(namedtuple('MemberNode', 'kind cls_ty member_ty')):
             return self.member_ty.right()
         else:
             return ""
+
+    def encoding(self):
+        return f'M{self.cls_ty.encoding()}{self.member_ty.encoding()}'
 
     def map(self, f):
         if self.kind in ('data', 'func'):
@@ -460,6 +548,10 @@ _builtin_types = {
     'Dn': Node('qual_name', (Node('name', 'std'), Node('builtin', 'nullptr_t')))
 }
 
+_mangled_ctor_map = {v: k for k, v in _ctor_dtor_map.items() if k.startswith('C')}
+_mangled_dtor_map = {v: k for k, v in _ctor_dtor_map.items() if k.startswith('D')}
+_mangled_builtin_types = {v: k for k, v in _builtin_types.items()}
+
 
 def _handle_cv(qualifiers, node):
     qualifier_set = set()
@@ -482,6 +574,20 @@ def _handle_indirect(qualifier, node):
         return Node('rvalue', node)
     return node
 
+def _handle_abominable(cv_qualifiers, ref_qualifier, node):
+    qualifier_set = set()
+    if 'V' in cv_qualifiers:
+        qualifier_set.add('volatile')
+    if 'K' in cv_qualifiers:
+        qualifier_set.add('const')
+    if ref_qualifier == 'R':
+        qualifier_set.add('&')
+    elif ref_qualifier == 'O':
+        qualifier_set.add('&&')
+    if qualifier_set:
+        return QualNode('abominable', value=node, qual=frozenset(qualifier_set))
+    else:
+        return node
 
 _NUMBER_RE = re.compile(r"\d+")
 
@@ -593,8 +699,7 @@ def _parse_name(cursor, is_nested=False):
             else:
                 cursor.add_subst(Node('qual_name', tuple(nodes)))
         node = Node('qual_name', tuple(nodes))
-        node = _handle_cv(match.group('cv_qual'), node)
-        node = _handle_indirect(match.group('ref_qual'), node)
+        node = _handle_abominable(match.group('cv_qual'), match.group('ref_qual'), node)
     elif match.group('template_param') is not None:
         seq_id = _parse_seq_id(cursor)
         if seq_id is None:
@@ -884,7 +989,12 @@ def parse(raw):
         ast = _expand_arg_packs(ast)
     return ast
 
-def is_ctor_or_dtor(ast) -> bool:
+
+def mangle(ast):
+    return f'_Z{ast.encoding()}'
+
+
+def _is_ctor_or_dtor(ast) -> bool:
     if ast.kind == 'func':
         return _is_ctor_or_dtor(ast.name)
     elif ast.kind == 'qual_name':
@@ -892,6 +1002,30 @@ def is_ctor_or_dtor(ast) -> bool:
         return kind == 'ctor' or kind == 'dtor'
     else:
        return False
+
+
+def _order_abominable_qualifiers(ast) -> list:
+    result = []
+    if 'const' in ast.qual:
+        result.append('const')
+    if 'volatile' in ast.qual:
+        result.append('volatile')
+    if '&' in ast.qual:
+        result.append('&')
+    elif '&&' in ast.qual:
+        result.append('&&')
+    return result
+
+
+def _is_nested_name(ast) -> bool:
+    if ast.kind == 'qual_name':
+        if len(ast.value) == 2:
+            return ast.value[-1].kind != 'tpl_args'
+        else:
+            return len(ast.value) > 1
+    else:
+        return ast.kind == 'abominable'
+
 
 # ================================================================================================
 
