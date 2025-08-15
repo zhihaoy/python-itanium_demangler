@@ -33,6 +33,7 @@ Type nodes:
       `"const"`, `"volatile"`, or `"restrict"`
     * `literal`: `node.value` (`str`) holds the literal representation as-is,
       `node.ty` holds a type node specifying the type of the literal
+    * `entity`: `node.value` holds a name node that refers to a declared entity
     * `function`: `node.name` holds a name node specifying the function name,
       `node.ret_ty` holds a type node specifying the return type of a template function,
       if any, or `None`, ``node.arg_tys` (`tuple`) holds a sequence of type nodes
@@ -287,12 +288,16 @@ class CastNode(namedtuple('CastNode', 'kind value ty')):
     def __str__(self):
         if self.kind == 'literal':
             return '(' + str(self.ty) + ')' + str(self.value)
+        elif self.kind == 'entity':
+            return str(self.value)
         else:
             return repr(self)
 
     def encoding(self):
         if self.kind == 'literal':
-            return 'L' + self.ty.encoding() + str(self.value) + 'E'
+            return f'L{self.ty.encoding()}{self.value}E'
+        elif self.kind == 'entity':
+            return f'L{mangle(self.value)}E'
         return ""
 
     def left(self):
@@ -302,6 +307,7 @@ class CastNode(namedtuple('CastNode', 'kind value ty')):
         return ""
 
     def map(self, f):
+        # does not affect references to entities
         if self.kind == 'literal':
             return self._replace(ty=f(self.ty))
         else:
@@ -856,7 +862,7 @@ def _parse_expr_primary(cursor):
         return None
     elif match.group('mangled_name') is not None:
         mangled_name = cursor.advance_until('E')
-        return _parse_mangled_name(_Cursor(mangled_name))
+        return CastNode('entity', _parse_mangled_name(_Cursor(mangled_name)), None)
     elif match.group('literal') is not None:
         ty = _parse_type(cursor)
         if ty is None:

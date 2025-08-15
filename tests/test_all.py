@@ -161,7 +161,7 @@ def test_indirect_type(mangled, demangled):
     ('_Z1fIL_Z1gEE', 'f<g>'),
 ])
 def test_literal(mangled, demangled):
-    assert_demangles(mangled, demangled)
+    assert_roundtrip(mangled, demangled)
 
 
 @pytest.mark.parametrize("mangled, demangled", [
@@ -293,6 +293,7 @@ def test_member_function(mangled, demangled):
 @pytest.mark.parametrize("mangled, demangled", [
     ('_Z3fooIRKN5boost2lsEEiv', 'int foo<boost::ls const&>()'),
     ('_ZNKR5boost2ls5memfnEv', 'boost::ls::memfn() const &'),
+    ('_Z3da2IL_Z4wellEEiv', 'int da2<well>()')
 ])
 def test_calls(mangled, demangled):
     assert_roundtrip(mangled, demangled)
