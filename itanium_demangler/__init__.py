@@ -172,10 +172,11 @@ class Node(namedtuple('Node', 'kind value')):
         if self.kind == 'name':
             return f'{len(self.value)}{self.value}'
         elif self.kind == 'builtin':
-            return _mangled_builtin_types.get(self, "")
+            return _mangled_builtin_types[self]
         elif self.kind == 'qual_name':
-            # Note: This doesn't handle substitutions, which is a complex topic.
-            if _is_nested_name(self):
+            if self == _builtin_types['Dn']:
+                return 'Dn'
+            elif _is_nested_name(self):
                 return f'N{"".join(p.encoding() for p in self.value)}E'
             else:
                 return "".join(p.encoding() for p in self.value)

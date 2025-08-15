@@ -119,7 +119,7 @@ def test_template_args_none():
 def test_builtin_types(type_code, type_node):
     mangled = '_Z1fI' + type_code + 'E'
     demangled = 'f<' + str(type_node) + '>'
-    assert_demangles(mangled, demangled)
+    assert_roundtrip(mangled, demangled)
 
 
 @pytest.mark.parametrize("mangled, demangled", [
