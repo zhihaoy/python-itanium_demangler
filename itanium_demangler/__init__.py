@@ -179,9 +179,7 @@ class Node(namedtuple('Node', 'kind value')):
                 return 'Dn'
             elif _is_nested_name(self):
                 prefix, rest = _infer_std_names(self.value)
-                if prefix is None:
-                    return f'N{"".join(p.encoding() for p in rest)}E'
-                elif len(rest) > 1:
+                if len(rest) > 1:
                     return f'N{prefix}{"".join(p.encoding() for p in rest)}E'
                 else:
                     return f'{prefix}{"".join(p.encoding() for p in rest)}'
@@ -270,7 +268,8 @@ class QualNode(namedtuple('QualNode', 'kind value qual')):
                 text += 'R'
             elif '&&' in self.qual:
                 text += 'O'
-            return f'N{text}{"".join(p.encoding() for p in self.value.value)}E'
+            prefix, rest = _infer_std_names(self.value.value)
+            return f'N{text}{prefix}{"".join(p.encoding() for p in rest)}E'
         else:
             return ""
 
@@ -1066,7 +1065,7 @@ def _is_nested_name(ast) -> bool:
 
 
 def _infer_std_names(components):
-    best_match_prefix = None
+    best_match_prefix = ''
     best_match_len = 0
 
     for prefix, std_name in _std_names.items():

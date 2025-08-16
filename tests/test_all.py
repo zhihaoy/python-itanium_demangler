@@ -297,7 +297,15 @@ def test_member_function(mangled, demangled):
 @pytest.mark.parametrize("mangled, demangled", [
     ('_Z3fooIRKN5boost2lsEEiv', 'int foo<boost::ls const&>()'),
     ('_ZNKR5boost2ls5memfnEv', 'boost::ls::memfn() const &'),
-    ('_Z3da2IL_Z4wellEEiv', 'int da2<well>()')
+    ('_Z3da2IL_Z4wellEEiv', 'int da2<well>()'),
+    ('_ZNSt6thread4joinEv', 'std::thread::join()'),
 ])
 def test_calls(mangled, demangled):
+    assert_roundtrip(mangled, demangled)
+
+
+@pytest.mark.parametrize("mangled, demangled", [
+    ('_ZNKSt8valarrayIiE4sizeEv', 'std::valarray<int>::size() const'),
+])
+def test_std_substs_extra(mangled, demangled):
     assert_roundtrip(mangled, demangled)
