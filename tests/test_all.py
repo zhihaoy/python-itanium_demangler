@@ -244,7 +244,10 @@ def test_const():
     ('_ZcviIiET_T_', 'operator int<int>(int, int)'),
 ])
 def test_operator_template(mangled, demangled):
-    assert_demangles(mangled, demangled)
+    if 'T' in mangled:
+        assert_demangles(mangled, demangled)
+    else:
+        assert_roundtrip(mangled, demangled)
 
 
 @pytest.mark.parametrize("mangled, demangled", [
@@ -306,6 +309,8 @@ def test_calls(mangled, demangled):
 
 @pytest.mark.parametrize("mangled, demangled", [
     ('_ZNKSt8valarrayIiE4sizeEv', 'std::valarray<int>::size() const'),
+    ('_ZNSt6vectorIiSaIiEED1Ev',
+     'std::vector<int, std::allocator<int>>::{dtor}()'),
 ])
-def test_std_substs_extra(mangled, demangled):
+def test_std_substs_nested(mangled, demangled):
     assert_roundtrip(mangled, demangled)
