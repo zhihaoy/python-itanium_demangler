@@ -21,7 +21,7 @@ classifiers = [
 [project.urls]
 "Homepage" = "https://github.com/whitequark/python-itanium_demangler"
 
-[project.optional-dependencies]
-test = [
-    "pytest",
+[dependency-groups]
+dev = [
+  "pytest"
 ]
