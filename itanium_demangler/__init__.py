@@ -1,4 +1,3 @@
-# encoding:utf-8
 name = "itanium_demangler"
 
 """
@@ -34,7 +33,7 @@ Type nodes:
     * `literal`: `node.value` (`str`) holds the literal representation as-is,
       `node.ty` holds a type node specifying the type of the literal
     * `entity`: `node.value` holds a name node that refers to a declared entity
-    * `function`: `node.name` holds a name node specifying the function name,
+    * `func`: `node.name` holds a name node specifying the function name,
       `node.ret_ty` holds a type node specifying the return type of a template function,
       if any, or `None`, ``node.arg_tys` (`tuple`) holds a sequence of type nodes
       specifying thefunction arguments
@@ -203,8 +202,8 @@ class Node(namedtuple('Node', 'kind value')):
             return _mangled_unary_operators[self.value]
         elif self.kind == 'oper_cast':
             return f'cv{self.value.encoding()}'
-
-        return ""
+        else:
+            raise NotImplementedError(f'{self.kind!r} is not supported')
 
     def left(self):
         if self.kind == "pointer":
@@ -246,9 +245,9 @@ class QualNode(namedtuple('QualNode', 'kind value qual')):
         else:
             return repr(self)
 
-    def encoding(self, parent=None):
+    def encoding(self):
         if self.kind == 'abi':
-            return self.value.encoding() + ''.join(f'B{len(x)}{x}' for x in sorted(self.qual))
+            return self.value.encoding() + "".join(f'B{len(x)}{x}' for x in sorted(self.qual))
         elif self.kind == 'cv_qual':
             text = ""
             if 'const' in self.qual:
@@ -270,8 +269,6 @@ class QualNode(namedtuple('QualNode', 'kind value qual')):
                 text += 'O'
             prefix, rest = _infer_std_names(self.value.value)
             return f'N{text}{prefix}{"".join(p.encoding() for p in rest)}E'
-        else:
-            return ""
 
     def left(self):
         return str(self)
@@ -303,7 +300,6 @@ class CastNode(namedtuple('CastNode', 'kind value ty')):
             return f'L{self.ty.encoding()}{self.value}E'
         elif self.kind == 'entity':
             return f'L{mangle(self.value)}E'
-        return ""
 
     def left(self):
         return str(self)
@@ -382,9 +378,6 @@ class FuncNode(namedtuple('FuncNode', 'kind name arg_tys ret_ty')):
             if self.name is None:
                 result += 'E'
             return result
-        else:
-            return ""
-
 
     def map(self, f):
         if self.kind == 'func':
@@ -426,8 +419,6 @@ class ArrayNode(namedtuple('ArrayNode', 'kind dimension ty')):
         if self.kind == 'array':
             # instantiation-dependent array bound expression is not supported
             return f'A{self.dimension.value}_{self.ty.encoding()}'
-        else:
-            return ""
 
     def map(self, f):
         if self.kind == 'array':
