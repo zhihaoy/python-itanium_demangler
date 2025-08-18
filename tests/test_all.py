@@ -1,6 +1,7 @@
 import pytest
 
-from itanium_demangler import parse, mangle, _operators, _builtin_types
+from itanium_demangler import parse, mangle
+from itanium_demangler import _operators, _unary_operators, _builtin_types
 
 
 def assert_parses(mangled, ast):
@@ -47,10 +48,11 @@ def test_ctor_dtor(mangled, demangled):
     assert_roundtrip(mangled, demangled)
 
 
-# Create a list of operators for parametrization, excluding special cases
+# Create a list of operators for parameterization, coping with special cases
+_any_operators = dict(_operators, **_unary_operators)
 _operator_tests = [
-    (op, 'operator' + _operators[op]) for op in _operators
-    if _operators[op] not in ['new', 'new[]', 'delete', 'delete[]']
+    (op, 'operator' + _any_operators[op]) for op in _any_operators
+    if _any_operators[op] not in ['new', 'new[]', 'delete', 'delete[]']
 ] + [
     ('nw', 'operator new'),
     ('na', 'operator new[]'),
